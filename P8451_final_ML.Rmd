@@ -1,5 +1,5 @@
 ---
-title: "P8451_HW10_ML"
+title: "P8451_final_ML"
 author: "Ruixi Li"
 date: "2024-03-26"
 output: html_document
@@ -221,6 +221,7 @@ would control for. They were the only three variables in 'covariates' dataset th
 * Some covariates and exposores are different across cohorts(I didn't do hypothesis testing, I just used visual inspection). We should assess the heterogenitity before we could pool the data from 6 cohots. But due to limited time, I just assumed that we can pool them together.
 
 # PCA to reduce dimensionality
+
 We reduced the dimensionality by conducting a separate PCA within each of the 19 pre-defined exposure groups, and retained only the first principal component for all of them. This way, we created a composite index variable (principal component scores) for each exposure group, and then averaged the scores by cohort to compare the levels.
 
 ```{r}
@@ -231,9 +232,11 @@ exp_groups = exp_groups[-20]
 
 
 for (family in exp_group){
-  feature
+  
+  ori_comp_names = codebook |> filter(family=="Air Pollution") |> pull(variable_name)
+  ori_comp = feature |> select(any_of(ori_comp_names))
   # Assuming `data_group` is your dataframe for one exposure group
-  res.pca <- PCA(data_group, scale.unit = TRUE, ncp = 5, graph = FALSE)
+  res.pca <- PCA(ori_comp, scale.unit = TRUE, ncp = 5, graph = FALSE)
 
   # Extracting the first principal component scores
   pc1_scores <- res.pca$ind$coord[, 1]
