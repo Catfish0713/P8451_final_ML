@@ -187,15 +187,7 @@ plotCorrelation(exp_cr, type = "circos")
 plotCorrelation(exp_cr, type = "matrix")
 ```
 
-
-
-
-
-
-
-
-* There's 6 phenotype in 'phenotype' dataset, 13 covariates in 'covariates' dataset and 88 prenatal exposures in 'pre_exp' dataset, which I would focus on. According to my research question, I would keep only one phenotype *e3_bw*(birthweight) as my outcome. Also, since this study don't focus on postnatal period, I would remove *hs_c_height_None*(Height of the child at 6-11 years old (m)), *hs_c_weight_None*(Weight of the child at 6-11 years old (kg)),*hs_child_age_None*(Child age at examination (years)) from my covariates list that I 
-would control for. They were the only three variables in 'covariates' dataset that are highly correlated with each other. **In a nutshell, the final dataset 'studydata' had 1 identifier *ID*, 1 outcome *e3bw*, 10 covariates and 88 prenatal exposures.** There's no missing and duplicate in this dataset. All variables were correctly classified as numeric or factor. 
+ **In a nutshell, the final dataset 'studydata' had 1 identifier *ID*, 1 outcome *e3bw*, 10 covariates and 88 prenatal exposures.** There's no missing and duplicate in this dataset. All variables were correctly classified as numeric or factor. 
 
 * Some covariates and exposores are different across cohorts(I didn't do hypothesis testing, I just used visual inspection). We should assess the heterogenitity before we could pool the data from 6 cohots. But due to limited time, I just assumed that we can pool them together.
 
