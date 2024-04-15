@@ -1,0 +1,279 @@
+---
+title: "HJJ"
+output: html_document
+date: "2024-04-15"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r library, include=FALSE}
+library(tidyverse)
+library(caret)
+library(rpart.plot)
+library(vcd)
+library(reshape2)
+
+```
+
+```{r}
+
+load("exposome.RData")
+
+# modify the dataframes to fit with the data format required by package 'rexposome'.
+## merge covariates and phenotype, phenotype only has birthweight.
+phenotype = phenotype |> select(ID, e3_bw)
+cov_phe = inner_join(covariates, phenotype, by = "ID")
+
+## I am planning on exploring the effect of prenatal exposome towards babies' birth weight. So I just removed all postnatal exposure.
+
+
+### tailor exposome into all continuous prenatal exposome, corresponding with codebook
+pre = codebook |> filter(period == "Pregnancy")
+name = rownames(pre)
+pre_exp = exposome |> select(ID,any_of(name)) 
+pre_exp_cont = pre_exp |> select(where(is.numeric))
+filtered_name = colnames(pre_exp_cont) 
+### tailor the codebook(description containing all prenatal exposome description info, including family-each row is an exposure)
+exp_description <- codebook |>  filter(variable_name %in% filtered_name) 
+### Since codebook's row name was originally the exposure names, I just removed the 'variable name' column 
+exp_description <- exp_description[,-1]
+### let ID be pre_exp's rowname and remove the id column
+rownames(pre_exp) <- pre_exp_cont[,1]
+pre_exp_cont <- pre_exp_cont[,-1]
+### let ID be cov_phe's rowname and remove the id column
+rownames(cov_phe) <- cov_phe[,1]
+cov_phe <- cov_phe[,-1]
+
+
+# give an overall look at the exposome of interest
+skimr::skim(pre_exp)
+
+```
+
+
+# Data Exploration
+
+## 1. Covariates and phenotypes
+1. Since this dataset is a combine data from 6 cohorts, I would explore population characteristics(covariates) and outcomes(phenotypes) by cohorts.
+
+
+### categorical variables
+
+```{r cate_cov_phe, warning=FALSE, message=FALSE}
+cate_cov_phe = cov_phe |> select(where(is.factor))
+
+# Frequency table
+frequency_tables_cov_phe <- cate_cov_phe %>% map(~ as.data.frame(table(.x)))
+frequency_tables_cov_phe |>knitr::kable()# name of variables in these freq tables are displayed in the plot below
+
+# Difference by cohort
+cate_cov_phe_summ = cate_cov_phe %>%
+  pivot_longer(cols = -h_cohort, names_to = "covariate", values_to = "value") %>%
+  group_by(h_cohort, covariate,value) %>%
+  summarize(n = n(), .groups = 'drop') %>%
+  ungroup() 
+
+cate_cov_phe_summ %>%
+  ggplot(aes(x = h_cohort, y = n, color = value)) +
+  geom_point() +
+  geom_smooth(aes(group=value), method = "loess", se = FALSE) + 
+  facet_grid(. ~ covariate) +
+  theme_minimal() +  # For a cleaner look
+  labs(x = "Cohort", y = "Count", title = "Summary by Cohort and Covariate") 
+
+```
+
+### continuous variables
+
+```{r cont_cov_phe}
+
+cont_cov_phe = cov_phe|> select(where(is.numeric))
+
+summary_table_cov_phe <- cont_cov_phe %>%
+  summarise(across(where(is.numeric), list(
+    Mean = ~mean(.x, na.rm = TRUE),
+    SD = ~sd(.x, na.rm = TRUE),
+    Median = ~median(.x, na.rm = TRUE),
+    IQR = ~IQR(.x, na.rm = TRUE)
+  ))) |>
+  pivot_longer(
+    cols = everything(), 
+    names_to = c(".value", "Statistic"), 
+    names_pattern = "(.*)_(.*)"
+  ) 
+summary_table_cov_phe|> knitr::kable()
+
+# I specify the continuous variables' names in 'name' vector to add h_cohort in this dataset(I want to assess if there's difference between cohorts-especially the exposome)
+name_cont_cov_phe = colnames(cont_cov_phe)[-1]
+results_cov_phe = cov_phe |> select(h_cohort, any_of(name_cont_cov_phe))
+
+results_summary_cov_phe = results_cov_phe %>%
+  group_by(h_cohort) %>%
+  summarize(across(where(is.numeric), 
+                   list(mean = ~mean(.x, na.rm = TRUE), 
+                        std = ~sd(.x, na.rm = TRUE)))) 
+
+# Since birthweight is too large(also my outcome), I displayed it separately.
+results_cov_phe |> ggplot(aes(x=h_cohort, y=e3_bw)) + geom_boxplot() +
+  labs(x = "Cohort", y = "Birthweight(g)", title = "Birthweight of children by Cohort") 
+
+results_cov_phe_nobw = results_cov_phe |> select(-e3_bw)
+
+# difference across cohorts
+results_melted_cov_phe = melt(results_cov_phe_nobw)
+results_melted_cov_phe |>
+  ggplot(aes(x=h_cohort, y=value, fill=variable)) + geom_boxplot() + facet_wrap(~variable)+
+  labs(x = "Cohort", y = "Covariates and phenotypes", title = "Covariates and phenotypes by Cohort") 
+
+```
+
+## 2. Exposome
+
+2. Look at the exposome characteristics by family and the correlation between exposome
+
+The current exposome data has no missing in the exposures nor in the phenotypes
+
+
+### continuous
+```{r}
+
+
+
+# exposome are not normally distributed
+nm <- normalityTest(exp)
+table(nm$normality)
+
+# correlation
+exp_cr <- correlation(exp, use = "pairwise.complete.obs", method.cor = "pearson")
+plotCorrelation(exp_cr, type = "circos")
+plotCorrelation(exp_cr, type = "matrix")
+```
+
+ **In a nutshell, the final dataset 'studydata' had 1 identifier *ID*, 1 outcome *e3bw*, 10 covariates and 88 prenatal exposures.** There's no missing and duplicate in this dataset. All variables were correctly classified as numeric or factor. 
+
+* Some covariates and exposores are different across cohorts(I didn't do hypothesis testing, I just used visual inspection). We should assess the heterogenitity before we could pool the data from 6 cohots. But due to limited time, I just assumed that we can pool them together.
+
+# PCA to reduce dimensionality 
+
+We reduced the dimensionality by conducting a separate PCA within each of the 19 pre-defined exposure groups, and retained only the first principal component for all of them. This way, we created a composite index variable (principal component scores) for each exposure group, and then averaged the scores by cohort to compare the levels.
+
+```{r}
+library(FactoMineR)
+
+# get all family of exposome
+pre_exp_grp = codebook |> filter(period=="Pregnancy" & !(family %in% c("Covariates", "Phenotype")))
+exp_groups = unique(pre_exp_grp$family)
+
+# Transform the nominal variables into binary variables using the dummy variable object
+dummies_pre_exp <- dummyVars("~ .", data = pre_exp)
+pre_exp_transformed <- data.frame(predict(dummies_pre_exp, newdata = pre_exp))
+
+# Delete the id column of pre_exp
+pre_exp_transformed = pre_exp_transformed |> select(-ID)
+
+# conduct PCA within each family iteratively and get a composite index variable (principal component scores) for each exposure group
+for (family in exp_groups){
+  
+  ori_comp_names = codebook |> filter(family==family) |> pull(variable_name)
+  ori_comp = pre_exp_transformed |> select(matches(paste0("^", ori_comp_names, ".*")))
+  res.pca <- PCA(ori_comp, scale.unit = TRUE, ncp = 5, graph = FALSE)
+
+  # Extracting the first principal component scores
+  pc1_scores <- res.pca$ind$coord[, 1]
+}
+
+```
+
+
+# Merge datasets
+```{r final_dataset}
+# merge features together
+feature = merge(pre_exp,covariates,by="ID")
+outcome = phenotype |> select(ID, e3_bw)
+studydata = merge(feature,outcome,by="ID") 
+
+# Add the PCA score to the whole dataset with cohort info
+studydata$pc1_score <- pc1_scores
+
+# Averaging the PCA scores by cohort
+average_scores_by_cohort <- studydata %>%
+  group_by(h_cohort) %>%
+  summarise(Average_pc1_Score = mean(pc1_scores, na.rm = TRUE))
+
+```
+By conducting PCA separately within each family, they aimed to:
+
+Reduce Dimensionality: They extracted the first principal component (PC) from each family to summarize the key variance within that family. This step reduces the complexity of the dataset while retaining critical information.
+Increase Comparability and Interpretability: Separate PCAs allowed the researchers to better understand and interpret the main drivers of variability within each exposure family. This approach helps in comparing levels of exposure across different cohorts.
+
+```{r partion}
+#Partition data for use in demonstration
+set.seed(123)
+train.indices<-createDataPartition(y=studydata$e3_bw,p=0.7,list=FALSE)
+train.data<-studydata[train.indices, ]
+test.data<-studydata[-train.indices, ]
+```
+
+```{r random forest}
+
+feat.count<-c((ncol(studydata)-4), (ncol(studydata)-4)/2, sqrt(ncol(studydata)-4))
+
+grid.rf<-expand.grid(mtry=feat.count)
+
+tree.num<-seq(100,500, by=200)
+
+results.trees<-list()
+
+for (ntree in tree.num){
+ set.seed(123)
+  rf.train<-train(e3_bw ~ ., 
+                 data=train.data, 
+                 method="rf", 
+                 metric="RMSE", 
+                 tuneGrid=grid.rf, 
+                 importance=TRUE, 
+                 ntree=ntree)
+index<-toString(ntree)
+results.trees[[index]]<-rf.train$results
+}
+
+output.trees<-bind_rows(results.trees, .id = "ntrees")
+best.tune<-output.trees[which.max(output.trees[,"RMSE"]),]
+```
+
+```{r}
+
+set.seed(123)
+control = trainControl(method = "repeatedcv", 
+                      number = 10,
+                      repeats = 5,
+                      selectionFunction = "best")
+
+svm.caret<-train(
+                  outcome ~ ., 
+                  data=train.data, 
+                  method="svmLinear", 
+                  trControl=train_control, 
+                  preProcess=c("center", "scale")
+                  )
+
+svm.caret
+
+#Incorporate different values for cost (C)
+svm.caret.2<-train(
+                    e3_bw ~ ., 
+                    data=train.data, 
+                    method="svmLinear",  
+                    trControl=control, 
+                    preProcess=c("center", "scale"), 
+                    tuneGrid=expand.grid(C=seq(0.001,2, length=30))
+                    )
+
+#Visualize accuracy versus values of C
+plot(svm.caret.2)
+
+#Obtain metrics of accuracy from training
+confusionMatrix(svm.caret.2)
+
+```
+
