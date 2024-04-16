@@ -137,16 +137,6 @@ The current exposome data has no missing in the exposures nor in the phenotypes
 ### continuous
 ```{r}
 
-
-
-# exposome are not normally distributed
-nm <- normalityTest(exp)
-table(nm$normality)
-
-# correlation
-exp_cr <- correlation(exp, use = "pairwise.complete.obs", method.cor = "pearson")
-plotCorrelation(exp_cr, type = "circos")
-plotCorrelation(exp_cr, type = "matrix")
 ```
 
  **In a nutshell, the final dataset 'studydata' had 1 identifier *ID*, 1 outcome *e3bw*, 10 covariates and 88 prenatal exposures.** There's no missing and duplicate in this dataset. All variables were correctly classified as numeric or factor. 
@@ -216,7 +206,7 @@ test.data<-studydata[-train.indices, ]
 
 ```{r random forest}
 
-feat.count<-c((ncol(studydata)-4), (ncol(studydata)-4)/2, sqrt(ncol(studydata)-4))
+feat.count<-c((ncol(pre_exp_grp)-4), (ncol(pre_exp_grp)-4)/2, sqrt(ncol(pre_exp_grp)-4))
 
 grid.rf<-expand.grid(mtry=feat.count)
 
@@ -240,6 +230,38 @@ results.trees[[index]]<-rf.train$results
 output.trees<-bind_rows(results.trees, .id = "ntrees")
 best.tune<-output.trees[which.max(output.trees[,"RMSE"]),]
 ```
+
+```{r}
+set.seed(123)
+
+#Trying three different values of mtry
+mtry.vals<-c(ncol(train.data)-1, sqrt(ncol(train.data)-1), 0.5*ncol(train.data)-1)
+mtry.grid<-expand.grid(.mtry=round(mtry.vals))
+
+control = trainControl(method = "repeatedcv", 
+                      number = 10,
+                      repeats = 5,
+                      selectionFunction = "best")
+
+rf.model<-train(e3_bw ~ ., 
+                    data=train.data, 
+                    method="rf", 
+                    metric="RMSE", 
+                    tuneGrid=mtry.grid, 
+                    trControl=control, 
+                    ntree=100)
+
+
+rf.model$results
+rf.model$bestTune
+rf.model$finalModel
+
+varImp(rf.model)
+plot(varImp(rf.model))
+
+varImpPlot(rf.model$finalModel)
+```
+
 
 ```{r}
 
