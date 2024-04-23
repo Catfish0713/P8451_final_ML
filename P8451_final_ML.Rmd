@@ -244,7 +244,7 @@ By conducting PCA separately within each family, they aimed to:
 Reduce Dimensionality: They extracted the first principal component (PC) from each family to summarize the key variance within that family. This step reduces the complexity of the dataset while retaining critical information.
 Increase Comparability and Interpretability: Separate PCAs allowed the researchers to better understand and interpret the main drivers of variability within each exposure family. This approach helps in comparing levels of exposure across different cohorts.
 
-# Implement Elastic Net Algorithm 
+# Elastic Net Algorithm 
 
 ```{r partition}
 #Partition data for use in demonstration
@@ -295,6 +295,61 @@ R2(prediction, test.data$e3_bw)
 ```
 
 * Elastic Net Algorithm were applied to training dataset, with the best hyperparameter of alpha = 1,lambda ~ 13.14. This is a lasso model and can select features. Finally, only 34 variables are kept in the model. testing RMSE is `r RMSE(prediction, test.data$e3_bw)` and testing R2 is `r R2(prediction, test.data$e3_bw)`.
+
+# Random Forest
+
+```{r random forest}
+# For random forest with lots of features, mtry = p(the number of all features)/3 tend to be a good default mtry for regression. mtry = sqrt(p) is a good default for classification. (https://scholarworks.utep.edu/cgi/viewcontent.cgi?article=4251&context=open_etd)
+feat.count<-c(ncol(ml_data)/3, ncol(ml_data)/2, ncol(ml_data)-1)
+
+grid.rf<-expand.grid(mtry=round(feat.count))
+
+tree.num<-seq(100,500, by=200)
+
+results.trees<-list()
+
+for (ntree in tree.num){
+ set.seed(123)
+  rf.model<-train(e3_bw ~ ., 
+                 data=train.data, 
+                 method="rf", 
+                 metric="RMSE", 
+                 tuneGrid=grid.rf, 
+                 importance=TRUE, 
+                 ntree=ntree)
+index<-toString(ntree)
+results.trees[[index]]<-rf.model$results
+}
+plot(rf.model)
+rf.model$results
+
+
+output.rf<-bind_rows(results.trees, .id = "ntrees")
+best.tune<-output.rf[which.max(output.rf[,"mtry"]==51),]
+best.tune$mtry
+mtry.grid<-expand.grid(.mtry=best.tune$mtry)
+set.seed(123)
+    rf.model.bt<-train(
+                      e3_bw~., 
+                      data=train.data, 
+                      method="rf", 
+                      trControl=control, 
+                      metric="RMSE", 
+                      tuneGrid=mtry.grid, 
+                      importance=TRUE,
+                      ntree=as.numeric(best.tune$ntrees))
+
+    
+
+
+rf.model.bt$results
+rf.model.bt$finalModel
+varImp(rf.model.bt)
+plot(varImp(rf.model.bt))
+```
+
+Although when mtry is close to the number of all features(p), RMSE is the lowest. But it increases the risk of overfitting. What's more, values of mtry that are close to the total number of variables in the model may weaken the forest by making the individual decision trees more correlated; when the decision trees consider similar sets of variables to split on, they are more likely to be similar, even if each is fit to a different bootstrapped data set. Ensemble models usually strive for independence of their members, as that improves predictive ability. We can also see from the plot that the decreasing trend of RMSE flattened after 51. I would choose 51 as my final mtry.
+
 
 # Interaction
 
