@@ -19,7 +19,7 @@ library(reshape2)
 My research question is to generate a hypothesis of which factors among a wide range of prenatal lifestyles and chemical exposures affect birth outcome(measured by birthweight) using data-driven  methods. 
 
 # Load .Rdata file and Data Preparation
-rexpose package were introduced here in hope of characterization more easily. But it seemed like too rigid to be applied to datasets containing both continuous and categorical variables. So I just dealwith continuous exposome with this package.
+rexpose package were introduced here in hope of characterization more easily. But it seemed like too rigid to be applied to datasets containing both continuous and categorical variables. So I just deal with continuous exposome with this package.
 
 ```{r data preparation, warning=FALSE, message=FALSE}
 library(rexposome)
@@ -187,11 +187,13 @@ plotCorrelation(exp_cr, type = "circos")
 plotCorrelation(exp_cr, type = "matrix")
 ```
 
- **In a nutshell, the final dataset 'studydata' had 1 identifier *ID*, 1 outcome *e3bw*, 10 covariates and 88 prenatal exposures.** There's no missing and duplicate in this dataset. All variables were correctly classified as numeric or factor. 
+ **In a nutshell, the final dataset 'studydata' had 1 identifier *ID*, 1 outcome *e3bw*, 10 covariates that were know at birth(excluding hs_c_height_None, hs_c_weight_None, hs_child_age_None) and 88 prenatal exposures.** There's no missing and duplicate in this dataset. All variables were correctly classified as numeric or factor. 
 
 * Some covariates and exposores are different across cohorts(I didn't do hypothesis testing, I just used visual inspection). We should assess the heterogenitity before we could pool the data from 6 cohots. But due to limited time, I just assumed that we can pool them together.
 
-# PCA to reduce dimensionality 
+* exposomes vary in their level, so we need to do centering and scaling.
+
+# PCA to reduce dimensionality(create a new variable) 
 
 We reduced the dimensionality by conducting a separate PCA within each of the 19 pre-defined exposure groups, and retained only the first principal component for all of them. This way, we created a composite index variable (principal component scores) for each exposure group, and then averaged the scores by cohort to compare the levels.
 
@@ -226,9 +228,12 @@ for (family in exp_groups){
 # Merge datasets
 ```{r final_dataset}
 # merge features together
-feature = merge(pre_exp,covariates,by="ID")
+feature = merge(pre_exp,covariates,by="ID") |> select(-c(hs_c_height_None, hs_c_weight_None, hs_child_age_None))
 outcome = phenotype |> select(ID, e3_bw)
 studydata = merge(feature,outcome,by="ID") 
+
+# keep all features in a new datafram 'ml_data' for further machine learning algorithms
+ml_data = studydata |> select(-ID)
 
 # Add the PCA score to the whole dataset with cohort info
 studydata$pc1_score <- pc1_scores
@@ -249,9 +254,9 @@ Increase Comparability and Interpretability: Separate PCAs allowed the researche
 ```{r partition}
 #Partition data for use in demonstration
 set.seed(123)
-train.indices<-createDataPartition(y=studydata$e3_bw,p=0.7,list=FALSE)
-train.data<-studydata[train.indices, ]
-test.data<-studydata[-train.indices, ]
+train.indices<-createDataPartition(y=ml_data$e3_bw,p=0.7,list=FALSE)
+train.data<-ml_data[train.indices, ]
+test.data<-ml_data[-train.indices, ]
 ```
 
 
@@ -350,38 +355,4 @@ plot(varImp(rf.model.bt))
 
 Although when mtry is close to the number of all features(p), RMSE is the lowest. But it increases the risk of overfitting. What's more, values of mtry that are close to the total number of variables in the model may weaken the forest by making the individual decision trees more correlated; when the decision trees consider similar sets of variables to split on, they are more likely to be similar, even if each is fit to a different bootstrapped data set. Ensemble models usually strive for independence of their members, as that improves predictive ability. We can also see from the plot that the decreasing trend of RMSE flattened after 51. I would choose 51 as my final mtry.
 
-
-# Interaction
-
-```{r interaction, message=FALSE, warning=FALSE}
-set.seed(123)
-
-model_interaction <- train(
-                  e3_bw ~ (h_pm10_ratio_preg_None+h_dairy_preg_Ter+h_fastfood_preg_Ter+h_folic_t1_None+h_pamod_t3_None+h_pavig_t3_None+h_veg_preg_Ter+hs_as_m_Log2+hs_cd_m_Log2+hs_cs_m_Log2+hs_cu_m_Log2+hs_tl_mdich_None+h_ndvi100_preg_None+hs_dep_madj_Log2+hs_dmtp_madj_Log2+hs_pbde47_madj_Log2+hs_pfna_m_Log2+hs_pfoa_m_Log2+hs_etpa_madj_Log2+hs_oxbe_madj_Log2+hs_oxbe_madj_Log2+hs_mibp_madj_Log2+e3_asmokcigd_p_None+hs_cotinine_mcat_None+h_trafnear_preg_pow1over3+h_bro_preg_Log+e3_sex_None+h_mbmi_None+hs_wgtgain_None+e3_gac_None+h_edumc_None+h_native_None+h_parity_None)^2, 
-                  data = train.data, preProcess=c("center", "scale"), 
-                  method = "glmnet",
-                  trControl = control,
-                  expand.grid(alpha = seq(0, 1, length = 20), 
-                                         lambda = exp(seq(3, -3, length = 100)))
-               )
-
-library(doParallel)
-registerDoParallel(cores = detectCores())
-
-#Print the values of alpha and lambda that gave best prediction
-model.3$bestTune
-
-#Examine model coefficients for variable importance
-coef(model.3$finalModel, model.3$bestTune$lambda)
-
-#Predict in test-set
-model.3.pred <- model.3 %>% 
-                predict(test.data)
-
-# Evaluation metrics and prediction performance
-data.frame(
-            RMSE = RMSE(model.3.pred, test.data$e3_bw),
-            Rsquare = R2(model.3.pred, test.data$e3_bw)
-          )
-```
 
