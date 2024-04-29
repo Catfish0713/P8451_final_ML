@@ -201,66 +201,57 @@ Increase Comparability and Interpretability: Separate PCAs allowed the researche
 
 
 
-# Logistic 
+# Linear regression 
 ```{r}
 # Load libraries
 library(tidyverse)
 library(caret)
 ```
 
-```{r}
-
-# Partition data
+```{r Partition data}
 set.seed(123)
 train.indices <- createDataPartition(y = studydata$e3_bw, p = 0.7, list = FALSE)
 train.data <- studydata[train.indices, ]
 test.data <- studydata[-train.indices, ]
-
 ```
 
-```{r}
+```{r Train linear regression model}
 
-# Define a threshold for binary classification
-threshold <- median(train.data$e3_bw, na.rm = TRUE)  # Use the median as the threshold
-
-# Convert the outcome variable to a factor with "High" and "Low"
-train.data$e3_bw <- ifelse(train.data$e3_bw > threshold, "High", "Low")
-test.data$e3_bw <- ifelse(test.data$e3_bw > threshold, "High", "Low")
-
-# Ensure the outcome variable is a factor
-train.data$e3_bw <- as.factor(train.data$e3_bw)
-test.data$e3_bw <- as.factor(test.data$e3_bw)
-
-```
-
-```{r}
-
-# Train logistic regression model
 set.seed(123)
 control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
 
-logreg.model <- train(
+linear.model <- train(
   e3_bw ~ .,
   data = train.data,
-  method = "glm",
-  family = binomial(),
+  method = "lm",
   trControl = control,
   preProcess = c("center", "scale")
 )
-
-# Check model results
-logreg.model
-
-# Model coefficients
-coef(logreg.model$finalModel)
-
-# Predictions on the test set
-predictions <- predict(logreg.model, test.data)
-
-# Calculate accuracy
-confusionMatrix(predictions, test.data$e3_bw)
 ```
 
+```{r Check model results}
+summary(linear.model)
+```
+
+```{r Predictions on the test set}
+predictions <- predict(linear.model, test.data)
+```
+
+```{r Evaluate the model}
+results <- postResample(predictions, test.data$e3_bw)
+results
+```
+
+```{r}
+
+ggplot(data = test.data, aes(x = e3_bw, y = predictions)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(x = "Actual Birthweight", y = "Predicted Birthweight", title = "Linear Model Predictions vs Actual")
+```
+
+# Model Fit: The fact that the majority of points are clustered around the line suggests that there is a moderate to strong positive linear relationship between the actual and predicted birthweights. However, the model is not perfect, which is expected in most real-world scenarios.
+# There is some variability in the predictions, as indicated by the scatter of points around the line. Notably, the model seems to underpredict for lower actual birthweights and overpredict for higher actual birthweights, as evidenced by the points below the line on the left and above the line on the right.
 
 
 # LASSO
