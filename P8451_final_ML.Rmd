@@ -328,7 +328,7 @@ rf.model$results
 
 
 output.rf<-bind_rows(results.trees, .id = "ntrees")
-best.tune<-output.rf[which.max(output.rf[,"mtry"]==51),]
+best.tune<-output.rf[which.max(output.rf[,"mtry"]==50),]
 best.tune$mtry
 mtry.grid<-expand.grid(.mtry=best.tune$mtry)
 set.seed(123)

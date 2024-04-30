@@ -1,0 +1,60 @@
+---
+title: "Ruixi_group_lasso"
+author: "Ruixi Li"
+date: "2024-04-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# One-hot coding and Group LASSO
+Since our features contain both continuous and categorical data,lasso regression doesn't work well with categorical variables in terms of both feature selection and prediction accuracy. It needs One-hot encoding of the categorical data and ignore the grouping effect.And then group lasso can be applied to shrink all variables in a group.It's robust for feature selection.
+
+```{r}
+```{r partition}
+# Partitioning the data into training and testing sets
+set.seed(123)
+train.indices <- createDataPartition(la_data$e3_bw, p = 0.7, list = FALSE)
+train.data <- la_data[train.indices, ]
+test.data <- la_data[-train.indices, ]
+
+# Feature scaling (center and scale)
+train.data.scaled <- scale(train.data)
+test.data.scaled <- scale(test.data)
+
+
+# Define groups-ensure dummies from one categorical variable is considered as a group
+group_labels <- gsub("\\..*", "", colnames(la_data))
+group_numbers <- as.numeric(factor(group_labels))
+
+
+library(grpreg)
+
+# Prepare the features and outcome
+x.train <- as.data.frame(train.data.scaled[, -which(names(train.data) == "e3_bw")])
+y.train <- as.data.frame(train.data.scaled[, which(names(train.data) == "e3_bw")])
+x.test <- as.matrix(test.data.scaled[, -which(names(test.data) == "e3_bw")])
+y.test <- test.data.scaled$e3_bw
+# To perform cross-validation to find the optimal lambda
+cv_model <- cv.grpreg(x.train, y.train, group = group_numbers, penalty = "grLasso")
+plot(cv_model)
+optimal_lambda <- 55 # 
+# Retrieve cross-validated mean squared errors for the optimal lambda
+rmse <- sqrt(min(cv_model$cve))
+
+# Calculate RMSE at the optimal lambda
+optimal_rmse <- sqrt(optimal_mse)
+optimal_rmse
+
+
+la.model.bt = grpreg(train.data, train.data$e3_bw, group = group_numbers, penalty = "grLasso", lambda = optimal_lambda)
+
+coefficients = coef(la.model.bt)
+```
+
+
+Given my aim of generating hypothesis, I want to make my model as simple as possible (fewer predictors) while still having good predictive power (low cross-validation error). The larger \Lambda\ represents larger amount of shrinkage in the lasso regression.Thus, I chose log(\lambda\)= 4 as my final \lambda\.
