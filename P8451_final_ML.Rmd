@@ -16,10 +16,10 @@ library(reshape2)
 
 # Research Question
 
-My research question is to generate a hypothesis of which factors among a wide range of prenatal lifestyles and chemical exposures affect birth outcome(measured by birthweight) using data-driven  methods. 
+My research question is to generate a hypotheses regarding a wide range of prenatal lifestyles and chemical exposures affect birth outcome(measured by birthweight) using data-driven methods. 
 
 # Load .Rdata file and Data Preparation
-rexpose package were introduced here in hope of characterization more easily. But it seemed like too rigid to be applied to datasets containing both continuous and categorical variables. So I just deal with continuous exposome with this package.
+rexpose package were introduced here in hope of characterization more easily. But it seemed too rigid to be applied to datasets containing both continuous and categorical variables. So I only deal with continuous exposome with this package.
 
 ```{r data preparation, warning=FALSE, message=FALSE}
 library(rexposome)
@@ -62,8 +62,6 @@ exp <- loadExposome(
 )
 # give an overall look at the exposome of interest
 skimr::skim(pre_exp)
-
-
 ```
 
 # Data Exploration
@@ -187,18 +185,31 @@ plotCorrelation(exp_cr, type = "circos")
 plotCorrelation(exp_cr, type = "matrix")
 ```
 
- **In a nutshell, the final dataset 'studydata' had 1 identifier *ID*, 1 outcome *e3bw*, 10 covariates that were know at birth(excluding hs_c_height_None, hs_c_weight_None, hs_child_age_None) and 88 prenatal exposures.** There's no missing and duplicate in this dataset. All variables were correctly classified as numeric or factor. 
+# Prepare datasets
+```{r final_dataset}
+# merge features together
+feature = merge(pre_exp,covariates,by="ID") |> select(-c(hs_c_height_None, hs_c_weight_None, hs_child_age_None))
+outcome = phenotype |> select(ID, e3_bw)
+studydata = merge(feature,outcome,by="ID") 
 
-* Some covariates and exposores are different across cohorts(I didn't do hypothesis testing, I just used visual inspection). We should assess the heterogenitity before we could pool the data from 6 cohots. But due to limited time, I just assumed that we can pool them together.
+# keep all interested features, no matter continuous or categorical, in a new dataframe 'rf_ln' for random forest algorithm and classic linear regression 
+rf_ln = studydata |> select(-ID)
 
-* exposomes vary in their level, so we need to do centering and scaling.
+
+# transform all categorical variables into dummy variables and keep all features in a dataframe 'la_data' for lasso algorithm
+# One-hot encode the categorical variables
+la_data <- dummyVars("~ .", data = rf_ln)
+la_data <- data.frame(predict(la_data, newdata = rf_ln))
+```
+
 
 # PCA to reduce dimensionality(create a new variable) 
 
-We reduced the dimensionality by conducting a separate PCA within each of the 19 pre-defined exposure groups, and retained only the first principal component for all of them. This way, we created a composite index variable (principal component scores) for each exposure group, and then averaged the scores by cohort to compare the levels.
+We reduced the dimensionality by conducting a separate PCA within each of the 19 pre-defined exposure groups, and retained only the first principal component for all of them. This way, we created a composite index variable (principal component scores) for each exposure group, and then averaged the scores by cohort to compare the levels. (https://www.sciencedirect.com/science/article/pii/S0160412018316295#t0005)
 
 ```{r}
 library(FactoMineR)
+
 
 # get all family of exposome
 pre_exp_grp = codebook |> filter(period=="Pregnancy" & !(family %in% c("Covariates", "Phenotype")))
@@ -209,31 +220,19 @@ dummies_pre_exp <- dummyVars("~ .", data = pre_exp)
 pre_exp_transformed <- data.frame(predict(dummies_pre_exp, newdata = pre_exp))
 
 # Delete the id column of pre_exp
-pre_exp_transformed = pre_exp_transformed |> select(-ID)
+pre_exp_transformed_noid = pre_exp_transformed |> select(-ID)
 
 # conduct PCA within each family iteratively and get a composite index variable (principal component scores) for each exposure group
 for (family in exp_groups){
   
   ori_comp_names = codebook |> filter(family==family) |> pull(variable_name)
-  ori_comp = pre_exp_transformed |> select(matches(paste0("^", ori_comp_names, ".*")))
+  ori_comp = pre_exp_transformed_noid |> select(matches(paste0("^", ori_comp_names, ".*")))
   res.pca <- PCA(ori_comp, scale.unit = TRUE, ncp = 5, graph = FALSE)
 
   # Extracting the first principal component scores
   pc1_scores <- res.pca$ind$coord[, 1]
 }
 
-```
-
-
-# Merge datasets
-```{r final_dataset}
-# merge features together
-feature = merge(pre_exp,covariates,by="ID") |> select(-c(hs_c_height_None, hs_c_weight_None, hs_child_age_None))
-outcome = phenotype |> select(ID, e3_bw)
-studydata = merge(feature,outcome,by="ID") 
-
-# keep all features in a new datafram 'ml_data' for further machine learning algorithms
-ml_data = studydata |> select(-ID)
 
 # Add the PCA score to the whole dataset with cohort info
 studydata$pc1_score <- pc1_scores
@@ -243,69 +242,68 @@ average_scores_by_cohort <- studydata %>%
   group_by(h_cohort) %>%
   summarise(Average_pc1_Score = mean(pc1_scores, na.rm = TRUE))
 
+average_scores_by_cohort
 ```
-By conducting PCA separately within each family, they aimed to:
 
-Reduce Dimensionality: They extracted the first principal component (PC) from each family to summarize the key variance within that family. This step reduces the complexity of the dataset while retaining critical information.
-Increase Comparability and Interpretability: Separate PCAs allowed the researchers to better understand and interpret the main drivers of variability within each exposure family. This approach helps in comparing levels of exposure across different cohorts.
+ **In a nutshell, the final dataset 'rf_ln' has 1 outcome *e3bw*, 10 covariates that were know at birth(excluding hs_c_height_None, hs_c_weight_None, hs_child_age_None) and 88 prenatal exposures.** There's no missing or duplicate in this dataset. All variables were correctly classified as numeric or factor. **To better application of some algorithms, some transformation of the dataset is needed(e.g. 'la_data')** 
+ 
+EDA findings:
 
-# Elastic Net Algorithm 
+1. Some covariates (e.g. education and nativity of parents) might different across cohorts. We should assess the heterogenitity before we could pool the data from six cohorts. But due  to limited time, I just assumed that we can pool them together and continue the further application od machine learning.
+
+2. exposomes vary in their level even though they are from the same family, so we need to do centering and scaling. Using a innovative methods of PCA, we can compare the overall level of exposome to see if there's cohort effect. 
+
+3. More detail on PCA that created a new variable that not involved in our main analysis:
+
+By conducting PCA separately within each family, we aimed to:
+
+* Reduce Dimensionality: We extracted the first principal component (PC) from each family to summarize the key variance within that family. This step reduces the complexity of the dataset while retaining critical information.
+* Increase Comparability and Interpretability: Separate PCAs allowed the researchers to better understand and interpret the main drivers of variability within each exposure family. This approach helps in comparing levels of exposure across different cohorts.
+
 
 ```{r partition}
 #Partition data for use in demonstration
 set.seed(123)
-train.indices<-createDataPartition(y=ml_data$e3_bw,p=0.7,list=FALSE)
-train.data<-ml_data[train.indices, ]
-test.data<-ml_data[-train.indices, ]
+train.indices<-createDataPartition(y=rf_ln$e3_bw,p=0.7,list=FALSE)
+train.data<-rf_ln[train.indices, ]
+test.data<-rf_ln[-train.indices, ]
+
+set.seed(123)
+control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
 ```
 
 
-```{r}
-set.seed(123)
-control = trainControl(method = "repeatedcv", 
-                      number = 10,
-                      repeats = 5,
-                      selectionFunction = "best")
+# LASSO
 
-
-# Model building
-en.model<- train(
+```{r lasso}
+la.model<- train(
                   e3_bw ~., 
                   data = train.data, 
                   method = "glmnet",
                   trControl =  control, 
                   preProc = c("center", "scale"),
-                  tuneGrid = expand.grid(alpha = seq(0, 1, length = 20), 
+                  tuneGrid = expand.grid(alpha = 1, 
                                          lambda = exp(seq(3, -3, length = 100)))
                 )
-# I chose tuneGrid here, because this command can be used for different scenarios,but using TuneLength, I have to look at all results and see which k is the best. 
 
-#Print the values of alpha and lambda that gave best prediction
-en.model$bestTune
+coef(la.model$finalModel, la.model$bestTune$lambda)
 
-
-# Model coefficients
-coef(en.model$finalModel, en.model$bestTune$lambda)
-
-resamp = en.model$resample
-
-
-# Predictions for models
-prediction = predict(en.model, test.data)
-
-# Evaluation
-RMSE(prediction, test.data$e3_bw)
-R2(prediction, test.data$e3_bw)
+print(la.model$bestTune)
+print(la.model$results$RMSE[which.min(la.model$results$RMSE)])
 
 ```
 
-* Elastic Net Algorithm were applied to training dataset, with the best hyperparameter of alpha = 1,lambda ~ 13.14. This is a lasso model and can select features. Finally, only 34 variables are kept in the model. testing RMSE is `r RMSE(prediction, test.data$e3_bw)` and testing R2 is `r R2(prediction, test.data$e3_bw)`.
+
+
+
 
 # Random Forest
 
+
 ```{r random forest}
 # For random forest with lots of features, mtry = p(the number of all features)/3 tend to be a good default mtry for regression. mtry = sqrt(p) is a good default for classification. (https://scholarworks.utep.edu/cgi/viewcontent.cgi?article=4251&context=open_etd)
-feat.count<-c(ncol(ml_data)/3, ncol(ml_data)/2, ncol(ml_data)-1)
+
+feat.count<-c(ncol(rf_ln)/3, ncol(rf_ln)/2, ncol(rf_ln)-1)
 
 grid.rf<-expand.grid(mtry=round(feat.count))
 
@@ -356,3 +354,60 @@ plot(varImp(rf.model.bt))
 Although when mtry is close to the number of all features(p), RMSE is the lowest. But it increases the risk of overfitting. What's more, values of mtry that are close to the total number of variables in the model may weaken the forest by making the individual decision trees more correlated; when the decision trees consider similar sets of variables to split on, they are more likely to be similar, even if each is fit to a different bootstrapped data set. Ensemble models usually strive for independence of their members, as that improves predictive ability. We can also see from the plot that the decreasing trend of RMSE flattened after 51. I would choose 51 as my final mtry.
 
 
+# Linear regression 
+
+```{r linear_reg}
+
+# Initialize a model with all predictors
+intercept.model <- lm(e3_bw ~ ., data = rf_ln)
+
+# Both-direction stepwise regression
+ln.model <- step(intercept.model, direction = "both", trace = 0)
+
+summary(ln.model)
+
+set.seed(123)
+
+
+linear.model <- train(
+  e3_bw ~ h_fdensity300_preg_Log + h_frichness300_preg_None + 
+    h_walkability_mean_preg_None + h_dairy_preg_Ter + h_folic_t1_None + 
+    h_meat_preg_Ter + h_pamod_t3_None + hs_cs_m_Log2 + h_temperature_preg_None + 
+    hs_dde_madj_Log2 + hs_pcb170_madj_Log2 + hs_dep_madj_Log2 + 
+    hs_dmtp_madj_Log2 + hs_pfos_m_Log2 + hs_bupa_madj_Log2 + 
+    hs_mepa_madj_Log2 + hs_meohp_madj_Log2 + hs_mibp_madj_Log2 + 
+    hs_mnbp_madj_Log2 + e3_asmokcigd_p_None + h_bro_preg_Log + 
+    h_cohort + e3_sex_None + h_mbmi_None + hs_wgtgain_None + 
+    e3_gac_None + h_edumc_None + h_parity_None,
+  data = train.data,
+  method = "lm",
+  trControl = control,
+  preProcess = c("center", "scale")
+)
+
+linear.model$results
+
+  
+```
+
+I would like to choose linear regression as my final model, since it has the lowest RMSE and interpretable.
+
+```{r Predictions on the test set}
+predictions <- predict(linear.model, test.data)
+```
+
+```{r Evaluate the model}
+results <- postResample(predictions, test.data$e3_bw)
+results
+```
+
+```{r visualization_linear}
+
+ggplot(data = test.data, aes(x = e3_bw, y = predictions)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(x = "Actual Birthweight", y = "Predicted Birthweight", title = "Linear Model Predictions vs Actual")
+```
+
+Model Fit: The fact that the majority of points are clustered around the line suggests that there is a moderate to strong positive linear relationship between the actual and predicted birthweights. However, the model is not perfect, which is expected in most real-world scenarios.
+There is some variability in the predictions, as indicated by the scatter of points around the line. Notably, the model seems to underpredict for lower actual birthweights and overpredict for higher actual birthweights, as evidenced by the points below the line on the left and above the line on the right.
