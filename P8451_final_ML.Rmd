@@ -5,6 +5,11 @@ date: "2024-03-26"
 output: html_document
 ---
 
+# Introduction
+Recent studies on prenatal exposure and lifestyle effects on birthweight reveal diverse findings. For instance, prenatal exposure to phthalates is linked with a higher risk of preterm birth and potentially lower birthweight​ (Qian 2020)​. Exposure to particulate matter during pregnancy has also been associated with varying impacts on birthweight, with some studies showing decreased birthweight when exposure occurs in the second trimester​ (Bell 2010)​. Additionally, maternal smoking during pregnancy, particularly in the context of higher stress and anxiety, is significantly associated with low birth weight​ (Schechter 2020)​. These findings underscore the complex interplay between environmental factors and maternal lifestyle during pregnancy on fetal development.
+
+Our research question is crucial for several reasons. Understanding how various prenatal lifestyles and chemical exposures affect birthweight is vital for improving public health outcomes. Low birthweight has been linked to numerous adverse health effects, such as increased risk of infant mortality and chronic diseases in later life, like diabetes and heart disease(Negrato 2013). Moreover, identifying these factors can guide public health policies and interventions aimed at minimizing harmful exposures during pregnancy, ultimately enhancing maternal and child health. Furthermore, a data-driven approach can provide objective, quantifiable insights that are essential for developing targeted, evidence-based healthcare strategies.
+
 ```{r library, include=FALSE}
 library(tidyverse)
 library(caret)
@@ -16,7 +21,7 @@ library(reshape2)
 
 # Research Question
 
-My research question is to generate a hypotheses regarding a wide range of prenatal lifestyles and chemical exposures affect birth outcome(measured by birthweight) using data-driven methods. 
+Our research question is to generate a hypotheses regarding a wide range of prenatal lifestyles and chemical exposures affect birth outcome(measured by birthweight) using data-driven methods. 
 
 # Load .Rdata file and Data Preparation
 rexpose package were introduced here in hope of characterization more easily. But it seemed too rigid to be applied to datasets containing both continuous and categorical variables. So I only deal with continuous exposome with this package.
@@ -205,7 +210,8 @@ la_data <- data.frame(predict(la_data, newdata = rf_ln))
 
 # PCA to reduce dimensionality(create a new variable) 
 
-We reduced the dimensionality by conducting a separate PCA within each of the 19 pre-defined exposure groups, and retained only the first principal component for all of them. This way, we created a composite index variable (principal component scores) for each exposure group, and then averaged the scores by cohort to compare the levels. (https://www.sciencedirect.com/science/article/pii/S0160412018316295#t0005)
+We reduced the dimensionality by conducting a separate PCA within each of the 19 pre-defined exposure groups, and retained only the first principal component for all of them. In this analysis, a composite index variable was created for each exposure group and then averaged by cohort to compare the levels. This approach significantly simplifies the data, facilitating the examination of key patterns and relationships between exposome exposures and birth weight outcomes across different groups. (https://www.sciencedirect.com/science/article/pii/S0160412018316295#t0005)
+
 
 ```{r}
 library(FactoMineR)
@@ -295,8 +301,6 @@ print(la.model$results$RMSE[which.min(la.model$results$RMSE)])
 
 
 
-
-
 # Random Forest
 
 
@@ -351,7 +355,7 @@ varImp(rf.model.bt)
 plot(varImp(rf.model.bt))
 ```
 
-Although when mtry is close to the number of all features(p), RMSE is the lowest. But it increases the risk of overfitting. What's more, values of mtry that are close to the total number of variables in the model may weaken the forest by making the individual decision trees more correlated; when the decision trees consider similar sets of variables to split on, they are more likely to be similar, even if each is fit to a different bootstrapped data set. Ensemble models usually strive for independence of their members, as that improves predictive ability. We can also see from the plot that the decreasing trend of RMSE flattened after 51. I would choose 51 as my final mtry.
+Although when mtry is close to the number of all features(p), RMSE is the lowest. But it increases the risk of overfitting. What's more, values of mtry that are close to the total number of variables in the model may weaken the forest by making the individual decision trees more correlated; when the decision trees consider similar sets of variables to split on, they are more likely to be similar, even if each is fit to a different bootstrapped data set. Ensemble models usually strive for independence of their members, as that improves predictive ability. We can also see from the plot that the decreasing trend of RMSE flattened after 50. I would choose 50 as my final mtry.
 
 
 # Linear regression 
@@ -390,7 +394,9 @@ linear.model$results
   
 ```
 
-I would like to choose linear regression as my final model, since it has the lowest RMSE and interpretable.
+# Model Comparasion
+
+The RMSE (Root Mean Squared Error) values for the LASSO, Random Forest, and Linear Regression algorithms were 405.02, 422.12, and 400.98 respectively. RMSE measures the average magnitude of the errors between predicted and actual values, with a lower RMSE indicating better model performance. Among the three, Linear Regression achieved the lowest RMSE, suggesting its superior predictive accuracy for birth weight. This superiority is further supported by comparing R-squared values, which represent the proportion of the variance in the dependent variable that is predictable from the independent variable(s). The R-squared values for Random Forest and Linear Regression were 0.2907 and 0.3571 respectively. Since a higher R-squared value indicates better model performance, the higher R-squared of the Linear Regression model confirms its effectiveness in explaining the variation in birth weight outcomes. Based on these evaluations of RMSE and R-squared values, Linear Regression is the optimal model among the three for predicting birth weight.
 
 ```{r Predictions on the test set}
 predictions <- predict(linear.model, test.data)
@@ -411,3 +417,35 @@ ggplot(data = test.data, aes(x = e3_bw, y = predictions)) +
 
 Model Fit: The fact that the majority of points are clustered around the line suggests that there is a moderate to strong positive linear relationship between the actual and predicted birthweights. However, the model is not perfect, which is expected in most real-world scenarios.
 There is some variability in the predictions, as indicated by the scatter of points around the line. Notably, the model seems to underpredict for lower actual birthweights and overpredict for higher actual birthweights, as evidenced by the points below the line on the left and above the line on the right.
+
+# Limitation
+
+**Treatment of Categorical Variables**
+
+In our analysis, we utilized Lasso regression. However, a notable limitation of Lasso regression is its general ineffectiveness with categorical variables. This is due to the method's tendency to select only one level of a categorical variable, ignoring the others, which can lead to biased or misleading results.
+
+One of the potential solution is transformed all categorical variables into dummy variables using the one-hot encoding method. This technique converts each category level into a new binary variable (0 or 1), allowing Lasso to treat each level as a separate feature. However, this approach increases the dimensionality of the data, which can still be problematic for Lasso regression due to its propensity to select an arbitrary subset of correlated dummy variables, potentially omitting important information.
+To further refine our model, we implemented group Lasso, a variation of Lasso that enhances its feature selection process by grouping related features together. In our case, dummy variables derived from the same categorical variable were grouped, ensuring that either all or none of the dummy variables in a group were selected. This method helps preserve the integrity of the categorical data structure, maintaining the complete set of information provided by each categorical variable while still benefiting from the regularization and feature selection properties of Lasso. This approach also aids in mitigating the risk of overfitting by reducing the model's complexity, providing a more robust analysis of feature importance relative to our outcome of interest.
+
+
+**Model Interpretability**
+While our final model, linear regression, provides interpretability, it can potentially oversimplify the association between prenatal factors and birth weight, especially if there are interactions between variables or the association is not linear. Hence, to address this problem, a more flexible model should be considered to apply, such as random forest and generalized additive models (GAMs). However, it's crucial to balance model complexicity with interpretability. 
+
+**Causal Inference**
+The final model, linear regression, is only eligible to identify associations between prenatal factors and birth weight, which fail to determine causal inference. An alternative method to strengthen casual relationship between prenatal factors and birth weight is to apply advanced casual inference methods, such as propensity score matching, or conducting a longitudinal research. These methods enable more robust and reliable conclusions regarding causal relationships between variables.
+
+**Ethical Concerns**
+
+Data privacy and potential stigamatized certain populations.
+Exposome research involves collecting extensive personal and environmental data from participants, including personal sensitive information in lifestyle choices, environmental exposures, and genetic data. Ensuring the privacy and confidentiality of this data is crucial. Therefore, the handling, storage, and processing of such data should comply with legal regulations and ethical standards to protect participants' privacy. Moreover, findings from studies investigating the impact of environmental and lifestyle factors on birth weight could potentially lead to stigmatization of individuals or groups. For instance, if particular behaviors or environmental exposures linked to lower birth weights are prevalent in specific population, these groups might face stigma or discrimination. Therefore, it's important to handle such information sensitively, emphasizing that these findings are not indicative of individual or collective fault and should be used to inform better health policies and interventions. Additionally, there may be bias related to the selection of study participants. For instance, our study participants have a higher likelihood to have access to smart phones and internet, hence it may not accurately represent the entire population of the studied area. Consequently, individuals without these resources—who were not included in the study—might become further marginalized and underrepresented in research that uses machine learning approaches.
+
+# Reference
+Qian, Y., Shao, H., Ying, X., Huang, W., & Hua, Y. (2020). The Endocrine Disruption of Prenatal Phthalate Exposure in Mother and Offspring. Frontiers in public health, 8, 366. https://doi.org/10.3389/fpubh.2020.00366
+
+Bell, M. L., Belanger, K., Ebisu, K., Gent, J. F., Lee, H. J., Koutrakis, P., & Leaderer, B. P. (2010). Prenatal exposure to fine particulate matter and birth weight: variations by particulate constituents and sources. Epidemiology (Cambridge, Mass.), 21(6), 884–891. https://doi.org/10.1097/EDE.0b013e3181f2f405
+
+Schechter, J., Do, E. K., Zhang, J. J., Hoyo, C., Murphy, S. K., Kollins, S. H., & Fuemmeler, B. (2020). Effect of Prenatal Smoke Exposure on Birth Weight: The Moderating Role of Maternal Depressive Symptoms. Nicotine & tobacco research : official journal of the Society for Research on Nicotine and Tobacco, 22(1), 40–47. https://doi.org/10.1093/ntr/nty267
+
+Negrato, C. A., & Gomes, M. B. (2013). Low birth weight: causes and consequences. Diabetology & metabolic syndrome, 5, 49. https://doi.org/10.1186/1758-5996-5-49 (Retraction published Diabetol Metab Syndr. 2014;6:60)
+
+
