@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # One-hot coding and Group LASSO
 Since our features contain both continuous and categorical data,lasso regression doesn't work well with categorical variables in terms of both feature selection and prediction accuracy. It needs One-hot encoding of the categorical data and ignore the grouping effect.And then group lasso can be applied to shrink all variables in a group.It's robust for feature selection.
 
-```{r}
+
 ```{r partition}
 # Partitioning the data into training and testing sets
 set.seed(123)
