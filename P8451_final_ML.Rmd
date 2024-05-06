@@ -23,7 +23,7 @@ library(reshape2)
 
 # Research Question
 
-Our research question is to generate a hypotheses regarding a wide range of prenatal lifestyles and chemical exposures affect birth outcome(measured by birthweight) using data-driven methods. 
+Our research question is to generate a hypotheses regarding a wide range of prenatal lifestyles and chemical exposures for birth outcome(measured by birthweight) using data-driven methods. 
 
 # Load .Rdata file and Data Preparation
 rexpose package were introduced here in hope of characterization more easily. But it seemed too rigid to be applied to datasets containing both continuous and categorical variables. So I only deal with continuous exposome with this package.
@@ -268,6 +268,7 @@ By conducting PCA separately within each family, we aimed to:
 * Reduce Dimensionality: We extracted the first principal component (PC) from each family to summarize the key variance within that family. This step reduces the complexity of the dataset while retaining critical information.
 * Increase Comparability and Interpretability: Separate PCAs allowed the researchers to better understand and interpret the main drivers of variability within each exposure family. This approach helps in comparing levels of exposure across different cohorts.
 
+4. Correlation between features were view through
 
 ```{r partition}
 #Partition data for use in demonstration
@@ -398,7 +399,7 @@ linear.model$results
 
 # Model Comparasion
 
-The RMSE (Root Mean Squared Error) values for the LASSO, Random Forest, and Linear Regression algorithms were 405.02, 422.12, and 400.98 respectively. RMSE measures the average magnitude of the errors between predicted and actual values, with a lower RMSE indicating better model performance. Among the three, Linear Regression achieved the lowest RMSE, suggesting its superior predictive accuracy for birth weight. This superiority is further supported by comparing R-squared values, which represent the proportion of the variance in the dependent variable that is predictable from the independent variable(s). The R-squared values for Random Forest and Linear Regression were 0.2907 and 0.3571 respectively. Since a higher R-squared value indicates better model performance, the higher R-squared of the Linear Regression model confirms its effectiveness in explaining the variation in birth weight outcomes. Based on these evaluations of RMSE and R-squared values, Linear Regression is the optimal model among the three for predicting birth weight.
+The RMSE (Root Mean Squared Error) values for the LASSO, Random Forest, and Linear Regression algorithms were 405.02, 422.12, and 400.98 respectively. RMSE measures the average magnitude of the errors between predicted and actual values, with a lower RMSE indicating better model performance. Among the three, Linear Regression achieved the lowest RMSE, suggesting its superior predictive accuracy for birth weight. This superiority is further supported by comparing R-squared values, which represent the proportion of the variance in the dependent variable that is predictable from the independent variable(s). The R-squared values for Random Forest and Linear Regression were 0.2907 and 0.3571 respectively. Since a higher R-squared value indicates better model performance, the higher R-squared of the Linear Regression model confirms its effectiveness in explaining the variation in birth weight outcomes. Based on these evaluations of RMSE and R-squared values along with the features they selected, Linear Regression is the optimal model among the three for generating a hypothesis for the birthweight. 
 
 ```{r Predictions on the test set}
 predictions <- predict(linear.model, test.data)
@@ -417,17 +418,16 @@ ggplot(data = test.data, aes(x = e3_bw, y = predictions)) +
   labs(x = "Actual Birthweight", y = "Predicted Birthweight", title = "Linear Model Predictions vs Actual")
 ```
 
-Model Fit: The fact that the majority of points are clustered around the line suggests that there is a moderate to strong positive linear relationship between the actual and predicted birthweights. However, the model is not perfect, which is expected in most real-world scenarios.
-There is some variability in the predictions, as indicated by the scatter of points around the line. Notably, the model seems to underpredict for lower actual birthweights and overpredict for higher actual birthweights, as evidenced by the points below the line on the left and above the line on the right.
+Interpretation of the final model: The fact that the majority of points are clustered around the line suggests that there is a moderate to strong positive linear relationship between the actual and predicted birthweights. There is some variability in the predictions, as indicated by the scatter of points around the line. Notably, the model seems to underpredict for lower actual birthweights and overpredict for higher actual birthweights, as evidenced by the points below the line on the left and above the line on the right. Linear regression also shrink more than 100 features to 28 features, which considerably narrow down the essential components for the hypothesis. However, the model showed a low performance, meaning that pre-natal exposures and lifestyles might not be good features to generate hypothesis for birthweight. Also, to further generate causal hypothesis, other applications including causal discovery through super learner might be used. 
+
+
 
 # Limitation
 
 **Treatment of Categorical Variables**
 
-In our analysis, we utilized Lasso regression. However, a notable limitation of Lasso regression is its general ineffectiveness with categorical variables. This is due to the method's tendency to select only one level of a categorical variable, ignoring the others, which can lead to biased or misleading results.
-
-One of the potential solution is transformed all categorical variables into dummy variables using the one-hot encoding method. This technique converts each category level into a new binary variable (0 or 1), allowing Lasso to treat each level as a separate feature. However, this approach increases the dimensionality of the data, which can still be problematic for Lasso regression due to its propensity to select an arbitrary subset of correlated dummy variables, potentially omitting important information.
-To further refine our model, we implemented group Lasso, a variation of Lasso that enhances its feature selection process by grouping related features together. In our case, dummy variables derived from the same categorical variable were grouped, ensuring that either all or none of the dummy variables in a group were selected. This method helps preserve the integrity of the categorical data structure, maintaining the complete set of information provided by each categorical variable while still benefiting from the regularization and feature selection properties of Lasso. This approach also aids in mitigating the risk of overfitting by reducing the model's complexity, providing a more robust analysis of feature importance relative to our outcome of interest.
+In our analysis, we utilized Lasso regression. However, a notable limitation of Lasso regression is that lasso regression doesn't work well with categorical variables in terms of both feature selection and prediction accuracy(performance). We just converted categorical variables into factors and treated them as ordinal variables, which can be approximately analyzed as continuous variables. However, some categorical variables were nominal variables, our analysis ignored the nature of the data and might lead to inaccurate analytical results.
+However, group lasso may be a good alternative for robust feature selection although at the cost of prediction accuracy(Huang 2024). We can first transform all categorical variables into dummy variables using the one-hot encoding method, followed by a group lasso model, which considers the grouping effect.In this case, dummy variables derived from the same categorical variable are grouped, ensuring that either all or none of the dummy variables in a group were selected. This method helps preserve the integrity of the categorical data structure, maintaining the complete set of information provided by each categorical variable while still benefiting from the regularization and feature selection properties of Lasso.This approach increases the dimensionality of the data,which will decrease the performance of this model. But our research question is hypothesis generation, robustness of feature selection is more important.
 
 
 **Model Interpretability**
@@ -442,6 +442,7 @@ Data privacy and potential stigamatized certain populations.
 Exposome research involves collecting extensive personal and environmental data from participants, including personal sensitive information in lifestyle choices, environmental exposures, and genetic data. Ensuring the privacy and confidentiality of this data is crucial. Therefore, the handling, storage, and processing of such data should comply with legal regulations and ethical standards to protect participants' privacy. Moreover, findings from studies investigating the impact of environmental and lifestyle factors on birth weight could potentially lead to stigmatization of individuals or groups. For instance, if particular behaviors or environmental exposures linked to lower birth weights are prevalent in specific population, these groups might face stigma or discrimination. Therefore, it's important to handle such information sensitively, emphasizing that these findings are not indicative of individual or collective fault and should be used to inform better health policies and interventions. Additionally, there may be bias related to the selection of study participants. For instance, our study participants have a higher likelihood to have access to smart phones and internet, hence it may not accurately represent the entire population of the studied area. Consequently, individuals without these resources—who were not included in the study—might become further marginalized and underrepresented in research that uses machine learning approaches.
 
 # Reference
+
 Qian, Y., Shao, H., Ying, X., Huang, W., & Hua, Y. (2020). The Endocrine Disruption of Prenatal Phthalate Exposure in Mother and Offspring. Frontiers in public health, 8, 366. https://doi.org/10.3389/fpubh.2020.00366
 
 Bell, M. L., Belanger, K., Ebisu, K., Gent, J. F., Lee, H. J., Koutrakis, P., & Leaderer, B. P. (2010). Prenatal exposure to fine particulate matter and birth weight: variations by particulate constituents and sources. Epidemiology (Cambridge, Mass.), 21(6), 884–891. https://doi.org/10.1097/EDE.0b013e3181f2f405
@@ -450,4 +451,53 @@ Schechter, J., Do, E. K., Zhang, J. J., Hoyo, C., Murphy, S. K., Kollins, S. H.,
 
 Negrato, C. A., & Gomes, M. B. (2013). Low birth weight: causes and consequences. Diabetology & metabolic syndrome, 5, 49. https://doi.org/10.1186/1758-5996-5-49 (Retraction published Diabetol Metab Syndr. 2014;6:60)
 
+Huang, Y., Tibbe, T., Tang, A., & Montoya, A. (2024). Lasso and Group Lasso with Categorical Predictors: Impact of Coding Strategy on Variable Selection and Prediction. Journal of Behavioral Data Science, 3(2), 15-42. https://doi.org/10.35566/jbds/v3n2/montoya
 
+# Optional: One-hot coding and Group LASSO
+Attempt of applying group lasso. Not sure if it's correct, but it shrink
+
+```{r partition_grplasso}
+# Partitioning the data into training and testing sets
+set.seed(123)
+train.indices <- createDataPartition(la_data$e3_bw, p = 0.7, list = FALSE)
+train.data <- la_data[train.indices, ]
+test.data <- la_data[-train.indices, ]
+
+# Feature scaling (center and scale)
+train.data.scaled <- scale(train.data)
+test.data.scaled <- scale(test.data)
+
+
+# Define groups-ensure dummies from one categorical variable is considered as a group
+la_data_grp = la_data[, -which(names(train.data) == "e3_bw")]
+
+group_labels <- gsub("\\..*", "", colnames(la_data_grp))
+group_numbers <- as.numeric(factor(group_labels))
+
+
+library(grpreg)
+
+# Prepare the features and outcome
+x.train <- as.data.frame(train.data.scaled[, -which(names(train.data) == "e3_bw")])
+y.train <- as.data.frame(train.data.scaled)$e3_bw
+x.test <- as.matrix(test.data.scaled[, -which(names(test.data) == "e3_bw")])
+y.test <- as.data.frame(test.data.scaled)$e3_bw
+# To perform cross-validation to find the optimal lambda
+cv_model <- cv.grpreg(x.train, y.train, group = group_numbers, penalty = "grLasso")
+plot(cv_model)
+optimal_lambda <- 55 # reason were written below
+# Retrieve cross-validated mean squared errors for the optimal lambda
+cv_error <- sqrt(min(cv_model$cve))
+cv_error
+
+
+
+la.model.bt = grpreg(x.train, y.train, group = group_numbers, penalty = "grLasso", lambda = optimal_lambda)
+
+coefficients = coef(la.model.bt)
+
+```
+
+Given my aim of generating hypothesis, I want to make my model as simple as possible (fewer predictors) while still having good predictive power (low cross-validation error). The larger \Lambda\ represents larger amount of shrinkage in the lasso regression.Thus, I chose log(\lambda\)= 4 as my final \lambda\.
+
+A Weird thing is that nearly coefficients for all features were 0, meaning that group lasso shrunk all features. cross-validation error were used in this package to evaluate model performance, but I am not sure weather the cross-validation error is RMSE.(not likely)
