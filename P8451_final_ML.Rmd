@@ -1,8 +1,10 @@
 ---
 title: "P8451_final_ML"
-author: "Ruixi Li"
+author: "Ruixi Li, Junjie Hu, Yuqing Liu, Ruohan Hong"
 date: "2024-03-26"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
 
 # Introduction
